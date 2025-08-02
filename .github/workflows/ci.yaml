@@ -1,0 +1,91 @@
+name: MLOps CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-suite:
+    runs-on: ubuntu-latest
+    name: Run Test Suite
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.13
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run tests with pytest
+      run: |
+        python -m pytest tests/ -v
+
+  train-and-quantize:
+    runs-on: ubuntu-latest
+    name: Train Model and Quantize
+    needs: test-suite
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.13
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Create necessary directories
+      run: |
+        mkdir -p models
+    
+    - name: Train model
+      run: |
+        python src/train.py
+    
+    - name: Quantize model
+      run: |
+        python src/quantize.py
+    
+    - name: Upload model artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: model-artifacts
+        path: models/
+
+  build-and-test-container:
+    runs-on: ubuntu-latest
+    name: Build and Test Docker Container
+    needs: train-and-quantize
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download model artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: model-artifacts
+        path: models/
+    
+    - name: Build Docker image
+      run: |
+        docker build -t mlops-linear-regression .
+    
+    - name: Test Docker container
+      run: |
+        docker run --rm mlops-linear-regression
+    
+    - name: Verify prediction script execution
+      run: |
+        echo "Container executed successfully - predict.py ran without errors"
